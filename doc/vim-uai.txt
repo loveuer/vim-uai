@@ -1,0 +1,116 @@
+*vim-uai.txt* *vim-uai*  Popup AI edits for Vim
+
+vim-uai requires Vim 8.2+ with +popupwin, +job, +channel and external Python 3.8+.
+
+COMMANDS                                               *:VimUAI* *:VimUAICancel*
+
+:[range]VimUAI [prompt]   Open the prompt popup for [range], default current line.
+                        Optional prompt text is prefilled; Enter submits it.
+:VimUAICancel            Close the popup and stop any pending local request job.
+
+MAPPINGS                                               *vim-uai-mappings*
+
+<leader>ai              Normal/Insert: current line; Visual: selected lines.
+<Plug>(vim-uai)          Mapping target available in all three modes.
+
+Set g:vim_uai_no_mappings = 1 to disable default mappings. Existing mappings on
+<leader>ai are preserved. Characterwise and blockwise selections use full lines.
+
+POPUP                                                  *vim-uai-popup*
+
+Type your instruction; Enter sends, Ctrl-J inserts a newline, Esc cancels.
+Left/Right move the input position, Home/End move within the current input line,
+Backspace/Delete remove characters. Ctrl-U deletes to the input line start.
+In the result preview, Enter replaces the selection and Esc discards it.
+Use j/k or arrow keys to scroll; Ctrl-D/Ctrl-U scroll by half a page.
+Use u after applying to undo the replacement. No file is saved automatically.
+If the original buffer has changed, applying is refused.
+
+CONFIGURATION                                          *vim-uai-config*
+
+OpenAI Chat Completions example: >
+    let g:vim_uai_provider = 'openai'
+    let g:vim_uai_api_base = 'https://api.openai.com/v1'
+    let g:vim_uai_model = 'your-model-name'
+    " Reads OPENAI_API_KEY by default.
+<
+Anthropic Messages example: >
+    let g:vim_uai_provider = 'anthropic'
+    let g:vim_uai_api_base = 'https://api.anthropic.com/v1'
+    let g:vim_uai_model = 'your-model-name'
+    " Reads ANTHROPIC_API_KEY by default.
+<
+Options (see README.md for full details):
+    g:vim_uai_api_key          Optional explicit key; otherwise provider env var.
+    g:vim_uai_send_full_buffer Send complete in-memory buffer, with unsaved edits (1).
+    g:vim_uai_context_lines    Nearby lines before AND after selection (40).
+    g:vim_uai_project_context  Include project tree and document excerpts (1).
+    g:vim_uai_project_root     Explicit root; otherwise auto-detect ('').
+                             b:vim_uai_project_root takes precedence.
+    g:vim_uai_project_max_entries  Maximum directory-tree paths (200).
+    g:vim_uai_project_max_depth    Tree depth; 1 lists only root children (3).
+    g:vim_uai_timeout          HTTP timeout in seconds (90).
+    g:vim_uai_max_tokens       Anthropic output limit (4096).
+    g:vim_uai_python           External Python executable ('python3').
+
+The base URL must include any prefix such as /v1, but not /chat/completions or
+/messages. The model must be configured. No streaming, tools or multi-file edits.
+EDITOR CONTEXT                                         *vim-uai-context*
+
+Both protocols receive the same JSON editor context in their user message:
+    instruction              The user's prompt.
+    timestamp, timezone      Submission time, including UTC offset, and timezone.
+    workdir                  Vim's working directory when the popup was opened.
+    file, filepath           Source basename and absolute path; empty if unnamed.
+    filetype                 Vim filetype.
+    file_content             Complete in-memory buffer, including unsaved edits.
+                             Newlines use LF; the final newline is preserved.
+                             Omitted if g:vim_uai_send_full_buffer = 0.
+    file_line_count          Total buffer line count.
+    file_modified            Whether the buffer has unsaved changes.
+    cursor                   Original line, character column, byte_column, text.
+    selection                Target start_line, end_line (inclusive) and text.
+    context_before/after     Nearby source excerpts.
+    project.root             Project root directory, separate from workdir.
+    project.root_source      Detection marker, 'configured', or fallback type.
+    project.current_file     Source path relative to root; null if unnamed or
+                             outside the configured root.
+    project.tree             Relative paths, directories ending with /.
+    project.tree_truncated   Listing limited by depth/count/scan budgets.
+    project.files            Project excerpts: path, start_line, end_line,
+                             content, truncated.
+    project.files_truncated  Additional excerpts omitted due to count/budget.
+    project.unavailable_directories/files  Paths that could not be read.
+
+All positions are one-based. Cursor and source paths are captured on invocation,
+before popup input. workdir respects :lcd and :tcd. Full file content is read-only
+context for the model; only the selected range is replaced. This data goes to
+your configured API.
+
+Set g:vim_uai_send_full_buffer = 0 to send only the target and nearby excerpts.
+g:vim_uai_context_lines controls excerpts independently of complete file content.
+
+PROJECT DISCOVERY                                      *vim-uai-project*
+
+Roots are detected from the source file's directory (workdir if unnamed).
+The nearest .git/.hg/.svn ancestor is preferred; .git may be a worktree file.
+Without a VCS marker, the nearest go.mod/package.json/pyproject.toml/Cargo.toml
+or other supported manifest selects the root. Otherwise a containing workdir or
+the nearest existing source parent is used. An explicit root overrides detection;
+relative roots are resolved against the workdir captured when the popup opened.
+
+Collection runs in the asynchronous Python worker. The tree defaults to 200
+paths and 3 levels, excluding common dependency/generated directories, without
+following symlinks. Exclusions are fixed names, not full .gitignore semantics.
+Incomplete trees do not imply unlisted files are absent.
+
+Excerpts include applicable AGENTS.md files from root to the source directory,
+nearby dependency manifests, root README files and selected build/style configs.
+At most 12 files are read, up to 8 KiB per file and 32 KiB total. Excerpts include
+line ranges and truncation flags. The active source is never read again from
+disk; other source files are only listed. Symbolic-link documents are skipped.
+
+Set g:vim_uai_project_context = 0 to omit project discovery and excerpts. This is
+independent of g:vim_uai_send_full_buffer, which controls the active buffer only.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
